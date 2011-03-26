@@ -11,6 +11,9 @@ from gmapi.utils.http import urlencode
 STATIC_URL = getattr(settings, 'GMAPI_STATIC_URL',
                      'http://maps.google.com/maps/api/staticmap')
 
+ELEVATION_URL = getattr(settings, 'GMAPI_ELEVATION_URL',
+                      'http://maps.googleapis.com/maps/api/elevation')
+
 GEOCODE_URL = getattr(settings, 'GMAPI_GEOCODE_URL',
                       'http://maps.google.com/maps/api/geocode')
 
@@ -445,14 +448,16 @@ class InfoWindow(MapClass):
             map['nfo'] = self
 
 
-class Geocoder(object):
-    """A service for converting between an address and a LatLng.
+class Elevation(object):
+    """A service to get the elevation of a LatLng.
 
-    This is equivalent to using google.maps.Geocoder except that
-    it makes use of the Web Service. You should always use the
+    This is equivalent to using google.maps.ElevationService except
+    that it makes use of the Web Service. You should always use the
     javascript API version in preference to this one as query
     limits are per IP. The javascript API uses the client's IP
     and thus is much less likely to hit any limits.
+
+    http://code.google.com/apis/maps/documentation/elevation/
 
     """
     # Handle blocking and sleeping at class level.
@@ -460,26 +465,23 @@ class Geocoder(object):
     _sleep = 0
     _last = 0
 
-    def geocode(self, request, callback=None):
-        """Geocode a request.
+    def elevation(self, request, callback=None):
+        """Gets the elevation of a request.
 
         Unlike the javascript API, this method is blocking. So, even
         though a callback function is supported, the method will also
         return the results and status directly.
 
         """
-        # Handle any unicode in the request.
-        if 'address' in request:
-            request['address'] = smart_str(request['address'],
-                                           strings_only=True).lower()
         # Add the sensor parameter if needed.
         if 'sensor' in request:
             if request['sensor'] != 'false':
                 request['sensor'] = 'true' if request['sensor'] else 'false'
         else:
             request['sensor'] = 'false'
-        cache_key = urlencode(request)
-        url = '%s/json?%s' % (GEOCODE_URL, cache_key)
+        encoded_request = urlencode(request)
+        cache_key = (ELEVATION_URL, encoded_request)
+        url = '%s/json?%s' % cache_key
         # Try up to 30 times if over query limit.
         for _ in xrange(30):
             # Check if result is already cached.
@@ -508,7 +510,84 @@ class Geocoder(object):
                     if self.__class__._block:
                         self.__class__._block = False
                         self.__class__._sleep = 0
-                    results = _parseGeocoderResult(response['results'])
+                    results = _parseLatLonResult(response['results'])
+                    if callback:
+                        callback(results, status)
+                    return results, status
+                else:
+                    return None, status
+        self.__class__._block = True
+        raise SystemError('The elevation API has failed too many times. '
+                          'You might have exceeded your daily limit.')
+
+
+class Geocoder(object):
+    """A service for converting between an address and a LatLng.
+
+    This is equivalent to using google.maps.Geocoder except that
+    it makes use of the Web Service. You should always use the
+    javascript API version in preference to this one as query
+    limits are per IP. The javascript API uses the client's IP
+    and thus is much less likely to hit any limits.
+
+    http://code.google.com/apis/maps/documentation/geocoding/
+
+    """
+    # Handle blocking and sleeping at class level.
+    _block = False
+    _sleep = 0
+    _last = 0
+
+    def geocode(self, request, callback=None):
+        """Geocode a request.
+
+        Unlike the javascript API, this method is blocking. So, even
+        though a callback function is supported, the method will also
+        return the results and status directly.
+
+        """
+        # Handle any unicode in the request.
+        if 'address' in request:
+            request['address'] = smart_str(request['address'],
+                                           strings_only=True).lower()
+        # Add the sensor parameter if needed.
+        if 'sensor' in request:
+            if request['sensor'] != 'false':
+                request['sensor'] = 'true' if request['sensor'] else 'false'
+        else:
+            request['sensor'] = 'false'
+        encoded_request = urlencode(request)
+        cache_key = (GEOCODE_URL, encoded_request)
+        url = '%s/json?%s' % cache_key
+        # Try up to 30 times if over query limit.
+        for _ in xrange(30):
+            # Check if result is already cached.
+            data = cache.get(cache_key)
+            if data is None:
+                if (max(0, time.time() - self.__class__._last) <
+                    self.__class__._sleep):
+                    # Wait a bit so that we don't make requests too fast.
+                    time.sleep(max(0, self.__class__._sleep +
+                                      self.__class__._last - time.time()))
+                data = urllib.urlopen(url).read()
+                self.__class__._last = time.time()
+            response = loads(data)
+            status = response['status']
+
+            if status == 'OVER_QUERY_LIMIT':
+                # Over limit, increase delay a bit.
+                if self.__class__._block:
+                    break
+                self.__class__._sleep += .1
+            else:
+                # Save results to cache.
+                cache.set(cache_key, data)
+                if status == 'OK':
+                    # Successful query, clear block if there is one.
+                    if self.__class__._block:
+                        self.__class__._block = False
+                        self.__class__._sleep = 0
+                    results = _parseLatLonResult(response['results'])
                     if callback:
                         callback(results, status)
                     return results, status
@@ -519,8 +598,8 @@ class Geocoder(object):
                           'You might have exceeded your daily limit.')
 
 
-def _parseGeocoderResult(result):
-    """ Parse Geocoder Results.
+def _parseLatLonResult(result):
+    """Parse the result of a Google Maps API.
 
     Traverses the results converting any latitude-longitude pairs
     into instances of LatLng and any SouthWest-NorthEast pairs
@@ -533,13 +612,13 @@ def _parseGeocoderResult(result):
     # Continue traversing.
     elif isinstance(result, dict):
         for item in result:
-            result[item] = _parseGeocoderResult(result[item])
+            result[item] = _parseLatLonResult(result[item])
         # Check for LatLngBounds objects and convert.
         if ('southwest' in result and 'northeast' in result):
             result = LatLngBounds(result['southwest'], result['northeast'])
     elif isinstance(result, (list, tuple)):
         for index in xrange(len(result)):
-            result[index] = _parseGeocoderResult(result[index])
+            result[index] = _parseLatLonResult(result[index])
     return result
 
 
