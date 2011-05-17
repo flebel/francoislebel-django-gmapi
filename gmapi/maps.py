@@ -480,8 +480,8 @@ class Elevation(object):
         else:
             request['sensor'] = 'false'
         encoded_request = urlencode(request)
-        cache_key = (ELEVATION_URL, encoded_request)
-        url = '%s/json?%s' % cache_key
+        url = '%s/json?%s' % (ELEVATION_URL, encoded_request)
+        cache_key = url
         # Try up to 30 times if over query limit.
         for _ in xrange(30):
             # Check if result is already cached.
@@ -557,8 +557,8 @@ class Geocoder(object):
         else:
             request['sensor'] = 'false'
         encoded_request = urlencode(request)
-        cache_key = (GEOCODE_URL, encoded_request)
-        url = '%s/json?%s' % cache_key
+        url = '%s/json?%s' % (GEOCODE_URL, encoded_request)
+        cache_key = url
         # Try up to 30 times if over query limit.
         for _ in xrange(30):
             # Check if result is already cached.
