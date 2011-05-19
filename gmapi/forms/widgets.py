@@ -11,7 +11,7 @@ from urlparse import urljoin
 
 
 JQUERY_URL = getattr(settings, 'GMAPI_JQUERY_URL',
-                     'http://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery'
+                     'http://ajax.googleapis.com/ajax/libs/jquery/1.6/jquery'
                      '%s.js' % ('' if settings.DEBUG else '.min'))
 
 MAPS_URL = getattr(settings, 'GMAPI_MAPS_URL',
