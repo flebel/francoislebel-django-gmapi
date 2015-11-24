@@ -1,10 +1,10 @@
 """Implements the Google Maps API v3."""
+import json
 import time
 import urllib
 from django.conf import settings
 from django.core.cache import cache
 from django.utils.encoding import force_unicode, smart_str
-from django.utils.simplejson import loads
 from gmapi.utils.http import urlencode
 
 
@@ -494,7 +494,7 @@ class Elevation(object):
                                       self.__class__._last - time.time()))
                 data = urllib.urlopen(url).read()
                 self.__class__._last = time.time()
-            response = loads(data)
+            response = json.loads(data)
             status = response['status']
 
             if status == 'OVER_QUERY_LIMIT':
@@ -571,7 +571,7 @@ class Geocoder(object):
                                       self.__class__._last - time.time()))
                 data = urllib.urlopen(url).read()
                 self.__class__._last = time.time()
-            response = loads(data)
+            response = json.loads(data)
             status = response['status']
 
             if status == 'OVER_QUERY_LIMIT':
