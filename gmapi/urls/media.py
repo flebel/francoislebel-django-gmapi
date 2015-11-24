@@ -10,7 +10,7 @@ if settings.DEBUG:
 """
 from os import path
 from django.conf import settings
-from django.conf.urls.defaults import *
+from django.conf.urls import url
 from urlparse import urljoin
 
 
@@ -27,8 +27,8 @@ MEDIA_PREFIX = getattr(settings, 'GMAPI_MEDIA_PREFIX', 'gmapi/')
 if MEDIA_PREFIX.startswith('http://') or MEDIA_PREFIX.startswith('https://'):
     urlpatterns = []
 else:
-    urlpatterns = patterns('',
-        (r'^%s(?P<path>.*)$' %
+    urlpatterns = [
+        url(r'^%s(?P<path>.*)$' %
          urljoin(settings.MEDIA_URL, MEDIA_PREFIX).lstrip('/'),
          'django.views.static.serve', {'document_root': MEDIA_ROOT}),
-    )
+    ]
